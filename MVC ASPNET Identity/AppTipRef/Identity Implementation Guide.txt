@@ -1,0 +1,624 @@
+﻿http://johnatten.com/2014/04/20/asp-net-mvc-and-identity-2-0-understanding-the-basics/
+
+Startup.cs -Partial Class
+==========
+Calls Configureauth() method with IAppbuilder object as parameter
+
+Partial StartupAuth.cs
+ Configures single Instances per context,UserManager,rolemanager/SignInManager
+ Configures InAuth options with cookies
+ Configures 2FA Cookies
+ Configures ExternalAuth/OAuth Options
+
+IdentityModel.cs
+================
+ApplicationUser Class with GenerateUserIdentityAsync() method [This class is inherited from 2 level Identity User Class 
+with all Properties for the user]
+
+ApplicationDbContext Class with ApplicationDbInitializer Clas[inheriting from 
+DropCreateDatabaseIfModelChanges<ApplicationDbContext>]s from the IdentityConfig.cs 
+
+IdentityConfig.cs
+=================
+ApplicationUserManager class - functions - Create() // Adding new Users, Adding Users to Roles, and Removing Users from Roles
+Setting Up the Email Service and the SMS Service in the ApplicationUserManager Create Method
+static Create() method returning an instance of the class itself.
+
+//ApplicationRoleManager class - 
+//static Create() method returning an instance of the class itself.
+
+EmailService and SmsService Class for two-factor authentication and account validation .both of these classes implement
+ a common interface, IIdentityMessageService.
+
+ApplicationSignInManager Class - Create(), CreateUserIdentity() methods
+
+==================
+||Customization ||
+==================
+Account Controller,Manage Controller has all the implementation calls for the Identity API method by default
+
+[[Now we want to enable EF code first migration feature which configures the code first to update the database schema instead of dropping and re-creating the database with each change on EF entities, to do so we need to open NuGet Package Manager Console and type the following commands:
+enable-migrations
+add-migration InitialCreate
+enable-migrations]]
+http://bitoftech.net/2015/01/21/asp-net-identity-2-with-asp-net-web-api-2-accounts-management/
+
+Custom DB Connection
+====================
+Pass in New connection string in ApplicationDbContext  base constructor for creating the Identity DB Objects in SQLSERVER 
+instead of Local SQLExpress
+
+Custom Table Name
+=================
+Can change default table names with Code First using FluentAPI by overriding OnModelCreating () method. Reference - http://stackoverflow.com/questions/19460386/how-can-i-change-the-table-names-when-using-visual-studio-2013-aspnet-identity
+
+During table renaming there is some known/possible issue in prepared Configuration file after add-migration "" command. so it
+needs some manual change as required ,then need to run update-database -verbose/script command - Reference http://stackoverflow.com/questions/30114751/renaming-identity-tables-with-ef6-migrations-failing
+Refer 201612091232119_TableRename.cs file for the changes done
+Now the Table USERROLES structure completely changed because of this - PK-FK Combination 2 column split to 4 columns of same menaing
+Also all tables have separate foreign key referenced and created 
+Need to check on possibility of fixing the issue in migration file
+//***Marking the possible changes in Migration Configuration  file
+
+Custom Property addition
+=========================
+Can add properties in Applicationuser class in Identity Config .. and then we need to add thos propertoes in 
+Register view model and need to handle them in Account controller as well to map Registerviewmodel to Applicationuser class 
+-Reference http://johnatten.com/2014/06/22/asp-net-identity-2-0-customizing-users-and-roles/
+Then we need to enable migration and upate the database Reference - http://johnatten.com/2013/10/27/configuring-db-connection-and-code-first-migration-for-identity-accounts-in-asp-net-mvc-5-and-visual-studio-2013/
+
+*****All the changes done through Code based migration =>Enable-migrations->Add-migration->Update-Datbase -verbose/script 
+
+Disable Recreation on running project
+======================================
+Stop DB Recreation using below DBIntializer() method in DBContext
+        Database.SetInitializer<ApplicationDbContext>(new ApplicationDbInitializer());
+
+
+================================================================================================================================================================
+===============================ASP.NET Identity 2.0: Customizing Users and Roles Controller================================================================================================================================================================
+================================================================================================================================================================
+https://www.codeproject.com/Articles/790720/ASP-NET-Identity-Customizing-Users-and-Roles
+
+Extending the Default ApplicationUser Class:
+============================================
+class ApplicationUser : IdentityUser 
+{
+     async Task<ClaimsIdentity> 
+        GenerateUserIdentityAsync(UserManager<ApplicationUser> manager)
+    {
+        var userIdentity = await manager
+            .CreateIdentityAsync(this, 
+                DefaultAuthenticationTypes.ApplicationCookie);
+        return userIdentity;
+    }
+ 
+     string Address { get; set; }
+     string City { get; set; }
+     string State { get; set; }
+ 
+    // Use a sensible display name for views:
+    [Display(Name = "Postal Code")]
+     string PostalCode { get; set; }
+ 
+    // Concatenate the address info for display in tables and such:
+     string DisplayAddress
+    {
+        get
+        {
+            string dspAddress = 
+                string.IsNullOrWhiteSpace(this.Address) ? "" : this.Address;
+            string dspCity = 
+                string.IsNullOrWhiteSpace(this.City) ? "" : this.City;
+            string dspState = 
+                string.IsNullOrWhiteSpace(this.State) ? "" : this.State;
+            string dspPostalCode = 
+                string.IsNullOrWhiteSpace(this.PostalCode) ? "" : this.PostalCode;
+ 
+            return string
+                .Format("{0} {1} {2} {3}", dspAddress, dspCity, dspState, dspPostalCode);
+        }
+    }
+}
+Update the RegisterViewModel to Include Address Info:
+====================================================
+class RegisterViewModel 
+{
+    [Required]
+    [EmailAddress]
+    [Display(Name = "Email")]
+     string Email { get; set; }
+ 
+    [Required]
+    [StringLength(100, ErrorMessage = 
+        "The {0} must be at least {2} characters long.", MinimumLength = 6)]
+    [DataType(DataType.Password)]
+    [Display(Name = "Password")]
+     string Password { get; set; }
+ 
+    [DataType(DataType.Password)]
+    [Display(Name = "Confirm password")]
+    [Compare("Password", ErrorMessage = 
+        "The password and confirmation password do not match.")]
+     string ConfirmPassword { get; set; }
+ 
+    // Add the new address properties:
+     string Address { get; set; }
+     string City { get; set; }
+     string State { get; set; }
+ 
+    // Use a sensible display name for views:
+    [Display(Name = "Postal Code")]
+     string PostalCode { get; set; }
+}
+Update the Register Method on AccountController:
+===============================================
+[HttpPost]
+[AllowAnonymous]
+[ValidateAntiForgeryToken]
+public async Task<ActionResult> Register(RegisterViewModel model)
+{
+    if (ModelState.IsValid)
+    {
+        var user = new ApplicationUser 
+        { 
+            UserName = model.Email, 
+            Email = model.Email 
+        };
+  
+        // Add the Address properties:
+        user.Address = model.Address;
+        user.City = model.City;
+        user.State = model.State;
+        user.PostalCode = model.PostalCode;
+ 
+        var result = await UserManager.CreateAsync(user, model.Password);
+        if (result.Succeeded)
+        {
+            var code = await UserManager.GenerateEmailConfirmationTokenAsync(user.Id);
+            var callbackUrl = Url.Action("ConfirmEmail", "Account", 
+                new { userId = user.Id, code = code }, protocol: Request.Url.Scheme);
+            await UserManager.SendEmailAsync(user.Id, 
+                "Confirm your account", 
+                "Please confirm your account by clicking this link: <a href=\"" 
+                + callbackUrl + "\">link</a>");
+            ViewBag.Link = callbackUrl;
+            return View("DisplayEmail");
+        }
+        AddErrors(result);
+    }
+  
+    // If we got this far, something failed, redisplay form
+    return View(model);
+}
+Update the EditUserViewModel:
+============================
+public class EditUserViewModel
+{
+    public string Id { get; set; }
+  
+    [Required(AllowEmptyStrings = false)]
+    [Display(Name = "Email")]
+    [EmailAddress]
+    public string Email { get; set; }
+  
+    // Add the Address Info:
+    public string Address { get; set; }
+    public string City { get; set; }
+    public string State { get; set; }
+  
+    // Use a sensible display name for views:
+    [Display(Name = "Postal Code")]
+    public string PostalCode { get; set; }
+  
+    public IEnumerable<SelectListItem> RolesList { get; set; }
+}
+Modified Create method on UserAdminController:
+======================================================
+[HttpPost]
+public async Task<ActionResult> Create(RegisterViewModel userViewModel, params string[] selectedRoles)
+{
+    if (ModelState.IsValid)
+    {
+        var user = new ApplicationUser 
+        { 
+            UserName = userViewModel.Email, Email = 
+            userViewModel.Email, 
+            // Add the Address Info:
+            Address = userViewModel.Address,
+            City = userViewModel.City,
+            State = userViewModel.State,
+            PostalCode = userViewModel.PostalCode
+        };
+  
+        // Add the Address Info:
+        user.Address = userViewModel.Address;
+        user.City = userViewModel.City;
+        user.State = userViewModel.State;
+        user.PostalCode = userViewModel.PostalCode;
+  
+        // Then create:
+        var adminresult = await UserManager.CreateAsync(user, userViewModel.Password);
+  
+        //Add User to the selected Roles 
+        if (adminresult.Succeeded)
+        {
+            if (selectedRoles != null)
+            {
+                var result = await UserManager.AddToRolesAsync(user.Id, selectedRoles);
+                if (!result.Succeeded)
+                {
+                    ModelState.AddModelError("", result.Errors.First());
+                    ViewBag.RoleId = new SelectList(await RoleManager.Roles.ToListAsync(), "Name", "Name");
+                    return View();
+                }
+            }
+        }
+        else
+        {
+            ModelState.AddModelError("", adminresult.Errors.First());
+            ViewBag.RoleId = new SelectList(RoleManager.Roles, "Name", "Name");
+            return View();
+        }
+        return RedirectToAction("Index");
+    }
+    ViewBag.RoleId = new SelectList(RoleManager.Roles, "Name", "Name");
+    return View();
+}
+Modified [Get] Implementation for UserAdmin Controller Edit Method:
+===================================================================
+public async Task<ActionResult> Edit(string id)
+{
+    if (id == null)
+    {
+        return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
+    }
+    var user = await UserManager.FindByIdAsync(id);
+    if (user == null)
+    {
+        return HttpNotFound();
+    }
+  
+    var userRoles = await UserManager.GetRolesAsync(user.Id);
+  
+    return View(new EditUserViewModel()
+    {
+        Id = user.Id,
+        Email = user.Email,
+        // Include the Addresss info:
+        Address = user.Address,
+        City = user.City,
+        State = user.State,
+        PostalCode = user.PostalCode,
+        RolesList = RoleManager.Roles.ToList().Select(x => new SelectListItem()
+        {
+            Selected = userRoles.Contains(x.Name),
+            Text = x.Name,
+            Value = x.Name
+        })
+    });
+}
+Modified Edit Method [Post] on UserAdminController:
+==================================================
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<ActionResult> Edit([Bind(Include = 
+    "Email,Id,Address,City,State,PostalCode")] 
+    EditUserViewModel editUser, params string[] selectedRole)
+{
+    if (ModelState.IsValid)
+    {
+        var user = await UserManager.FindByIdAsync(editUser.Id);
+        if (user == null)
+        {
+            return HttpNotFound();
+        }
+ 
+        user.UserName = editUser.Email;
+        user.Email = editUser.Email;
+        user.Address = editUser.Address;
+        user.City = editUser.City;
+        user.State = editUser.State;
+        user.PostalCode = editUser.PostalCode;
+  
+        var userRoles = await UserManager.GetRolesAsync(user.Id);
+        selectedRole = selectedRole ?? new string[] { };
+        var result = await UserManager.AddToRolesAsync(user.Id, 
+            selectedRole.Except(userRoles).ToArray<string>());
+  
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError("", result.Errors.First());
+            return View();
+        }
+        result = await UserManager.RemoveFromRolesAsync(user.Id, 
+            userRoles.Except(selectedRole).ToArray<string>());
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError("", result.Errors.First());
+            return View();
+        }
+        return RedirectToAction("Index");
+    }
+    ModelState.AddModelError("", "Something failed.");
+    return View();
+}
+Auto generate Admin user on DB intialization
+==============================================
+The ApplicationDbInitializer Class in IdentityConfig.cs
+Hide   Shrink    Copy Code
+public class ApplicationDbInitializer 
+    : DropCreateDatabaseIfModelChanges<ApplicationDbContext> 
+{
+    protected override void Seed(ApplicationDbContext context) {
+        InitializeIdentityForEF(context);
+        base.Seed(context);
+    }
+  
+    //Create User=Admin@Admin.com with password=Admin@123456 in the Admin role        
+    public static void InitializeIdentityForEF(ApplicationDbContext db) {
+        var userManager = 
+            HttpContext.Current.GetOwinContext()
+                .GetUserManager<ApplicationUserManager>();
+        var roleManager = 
+            HttpContext.Current.GetOwinContext().Get<ApplicationRoleManager>();
+        const string name = "admin@example.com";
+        const string password = "Admin@123456";
+        const string roleName = "Admin";
+  
+        //Create Role Admin if it does not exist
+        var role = roleManager.FindByName(roleName);
+        if (role == null) {
+            role = new IdentityRole(roleName);
+            var roleresult = roleManager.Create(role);
+        }
+  
+        var user = userManager.FindByName(name);
+        if (user == null) {
+            user = new ApplicationUser { UserName = name, Email = name };
+            var result = userManager.Create(user, password);
+            result = userManager.SetLockoutEnabled(user.Id, false);
+        }
+  
+        // Add user admin to Role Admin if not already added
+        var rolesForUser = userManager.GetRoles(user.Id);
+        if (!rolesForUser.Contains(role.Name)) {
+            var result = userManager.AddToRole(user.Id, role.Name);
+        }
+    }
+}
+
+Roles
+=====
+=====
+Role Creation
+=============
+public async Task<ActionResult> Create(RoleViewModel roleViewModel)
+{
+    if (ModelState.IsValid)
+    {
+        // Initialize ApplicationRole instead of IdentityRole:
+        var role = new ApplicationRole(roleViewModel.Name);
+        var roleresult = await RoleManager.CreateAsync(role);
+        if (!roleresult.Succeeded)
+        {
+            ModelState.AddModelError("", roleresult.Errors.First());
+            return View();
+        }
+        return RedirectToAction("Index");
+    }
+    return View();
+}
+[HttpPost]
+public async Task<ActionResult> Create(RoleViewModel roleViewModel)
+{
+    if (ModelState.IsValid)
+    {
+        var role = new ApplicationRole(roleViewModel.Name);
+  
+        // Save the new Description property:
+        role.Description = roleViewModel.Description;
+        var roleresult = await RoleManager.CreateAsync(role);
+        if (!roleresult.Succeeded)
+        {
+            ModelState.AddModelError("", roleresult.Errors.First());
+            return View();
+        }
+        return RedirectToAction("Index");
+    }
+    return View();
+}
+Role Edit
+==========
+public async Task<ActionResult> Edit(string id)
+{
+    if (id == null)
+    {
+        return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
+    }
+    var role = await RoleManager.FindByIdAsync(id);
+    if (role == null)
+    {
+        return HttpNotFound();
+    }
+    RoleViewModel roleModel = new RoleViewModel 
+    { 
+        Id = role.Id, 
+        Name = role.Name 
+    };
+  
+    // Update the new Description property for the ViewModel:
+    roleModel.Description = role.Description;
+    return View(roleModel);
+}
+  
+  
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<ActionResult> Edit([Bind(
+    Include = "Name,Id,Description")] 
+    RoleViewModel roleModel)
+{
+    if (ModelState.IsValid)
+    {
+        var role = await RoleManager.FindByIdAsync(roleModel.Id);
+        role.Name = roleModel.Name;
+  
+        // Update the new Description property:
+        role.Description = roleModel.Description;
+        await RoleManager.UpdateAsync(role);
+        return RedirectToAction("Index");
+    }
+    return View();
+}
+Initialize ApplicationRole in Database Set-Up:
+============================================
+public static void InitializeIdentityForEF(ApplicationDbContext db) {
+    var userManager = 
+        HttpContext.Current.GetOwinContext().GetUserManager<ApplicationUserManager>();
+    var roleManager = 
+        HttpContext.Current.GetOwinContext().Get<ApplicationRoleManager>();
+    const string name = "admin@example.com";
+    const string password = "Admin@123456";
+    const string roleName = "Admin";
+  
+    //Create Role Admin if it does not exist
+    var role = roleManager.FindByName(roleName);
+    if (role == null) {
+        role = new ApplicationRole(roleName);
+        var roleresult = roleManager.Create(role);
+    }
+   
+    var user = userManager.FindByName(name);
+    if (user == null) {
+        user = new ApplicationUser { UserName = name, Email = name };
+        var result = userManager.Create(user, password);
+        result = userManager.SetLockoutEnabled(user.Id, false);
+    }
+  
+    // Add user admin to Role Admin if not already added
+    var rolesForUser = userManager.GetRoles(user.Id);
+    if (!rolesForUser.Contains(role.Name)) {
+        var result = userManager.AddToRole(user.Id, role.Name);
+    }
+}
+
+
+
+
+
+================================================================
+
+Good MSDN Example  - https://www.asp.net/web-forms/overview/getting-started/getting-started-with-aspnet-45-web-forms/membership-and-administration
+Gives Page/Folder/Role based restriction
+
+
+AddUserAndRole()
+    {
+      // Access the application context and create result variables.
+      Models.ApplicationDbContext context = new ApplicationDbContext();
+      IdentityResult IdRoleResult;
+      IdentityResult IdUserResult;
+
+      // Create a RoleStore object by using the ApplicationDbContext object. 
+      // The RoleStore is only allowed to contain IdentityRole objects.
+      var roleStore = new RoleStore<IdentityRole>(context);
+
+      // Create a RoleManager object that is only allowed to contain IdentityRole objects.
+      // When creating the RoleManager object, you pass in (as a parameter) a new RoleStore object. 
+      var roleMgr = new RoleManager<IdentityRole>(roleStore);
+
+      // Then, you create the "canEdit" role if it doesn't already exist.
+      if (!roleMgr.RoleExists("canEdit"))
+      {
+        IdRoleResult = roleMgr.Create(new IdentityRole { Name = "canEdit" });
+      }
+
+      // Create a UserManager object based on the UserStore object and the ApplicationDbContext  
+      // object. Note that you can create new objects and use them as parameters in
+      // a single line of code, rather than using multiple lines of code, as you did
+      // for the RoleManager object.
+      var userMgr = new UserManager<ApplicationUser>(new UserStore<ApplicationUser>(context));
+      var appUser = new ApplicationUser
+      {
+        UserName = "canEditUser@wingtiptoys.com",
+        Email = "canEditUser@wingtiptoys.com"
+      };
+      IdUserResult = userMgr.Create(appUser, "Pa$$word1");
+
+      // If the new "canEdit" user was successfully created, 
+      // add the "canEdit" user to the "canEdit" role. 
+      if (!userMgr.IsInRole(userMgr.FindByEmail("canEditUser@wingtiptoys.com").Id, "canEdit"))
+      {
+        IdUserResult = userMgr.AddToRole(userMgr.FindByEmail("canEditUser@wingtiptoys.com").Id, "canEdit");
+      }
+    }
+
+Folder based Configuration for Page access in aspx
+=================================================
+	<?xml version="1.0"?>
+<configuration>
+  <system.web>
+    <authorization>
+      <allow roles="canEdit"/>
+      <deny users="*"/>
+    </authorization>
+  </system.web>
+</configuration>
+
+
+=============================================================================================================================================
+http://bitoftech.net/2015/03/11/asp-net-identity-2-1-roles-based-authorization-authentication-asp-net-web-api/
+
+protected override void Seed(AspNetIdentity.WebApi.Infrastructure.ApplicationDbContext context)
+        {
+            //  This method will be called after migrating to the latest version.
+ 
+            var manager = new UserManager<ApplicationUser>(new UserStore<ApplicationUser>(new ApplicationDbContext()));
+            
+            var roleManager = new RoleManager<IdentityRole>(new RoleStore<IdentityRole>(new ApplicationDbContext()));
+ 
+            var user = new ApplicationUser()
+            {
+                UserName = "SuperPowerUser",
+                Email = "taiseer.joudeh@gmail.com",
+                EmailConfirmed = true,
+                FirstName = "Taiseer",
+                LastName = "Joudeh",
+                Level = 1,
+                JoinDate = DateTime.Now.AddYears(-3)
+            };
+ 
+            manager.Create(user, "MySuperP@ss!");
+ 
+            if (roleManager.Roles.Count() == 0)
+            {
+                roleManager.Create(new IdentityRole { Name = "SuperAdmin" });
+                roleManager.Create(new IdentityRole { Name = "Admin"});
+                roleManager.Create(new IdentityRole { Name = "User"});
+            }
+ 
+            var adminUser = manager.FindByName("SuperPowerUser");
+ 
+            manager.AddToRoles(adminUser.Id, new string[] { "SuperAdmin", "Admin" });
+        }
+
+
+
+
+
+
+		
+    public class ApplicationRoleManager : RoleManager<IdentityRole>
+    {
+        public ApplicationRoleManager(IRoleStore<IdentityRole, string> roleStore)
+            : base(roleStore)
+        {
+        }
+ 
+        public static ApplicationRoleManager Create(IdentityFactoryOptions<ApplicationRoleManager> options, IOwinContext context)
+        {
+            var appRoleManager = new ApplicationRoleManager(new RoleStore<IdentityRole>(context.Get<ApplicationDbContext>()));
+ 
+            return appRoleManager;
+        }

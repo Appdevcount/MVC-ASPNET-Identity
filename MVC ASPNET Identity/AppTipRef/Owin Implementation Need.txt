@@ -1,0 +1,549 @@
+﻿OWIN and Katana
+===============
+===============
+
+	Open Web Interface for .NET (OWIN) - https://docs.microsoft.com/en-us/aspnet/aspnet/overview/owin-and-katana/an-overview-of-project-katana
+	=================================
+	 defines an abstraction between .NET web servers and web applications. By decoupling the web server from the application, OWIN makes it easier to create middleware for .NET web development. Also, OWIN makes it easier to port web applications to other hosts—for example, self-hosting in a Windows service or other process.
+	OWIN is a community-owned specification, not an implementation. The Katana project is a set of open-source OWIN components developed by Microsoft
+
+	The resulting abstraction consists of two core elements. 
+	1)The first is the environment dictionary. This data structure is responsible for storing all of the state necessary for processing an HTTP request and response, as well as any relevant server state. The environment dictionary is defined as follows:
+	console
+
+	IDictionary<string, object>
+
+	In addition to specifying the type for the environment dictionary, the OWIN specification defines a list of core dictionary key value pairs. For example, the following table shows the required dictionary keys for an HTTP request:
+	Key Name	Value Description
+	"owin.RequestBody"	A Stream with the request body, if any. Stream.Null MAY be used as a placeholder if there is no request body. See Request Body.
+	"owin.RequestHeaders"	An IDictionary<string, string[]> of request headers. See Headers.
+	"owin.RequestMethod"	A string containing the HTTP request method of the request (e.g., "GET", "POST").
+	"owin.RequestPath"	A string containing the request path. The path MUST be relative to the "root" of the application delegate; see Paths.
+	"owin.RequestPathBase"	A string containing the portion of the request path corresponding to the "root" of the application delegate; see Paths.
+	"owin.RequestProtocol"	A string containing the protocol name and version (e.g. " HTTP/1.0 " or " HTTP/1.1 ").
+	"owin.RequestQueryString"	A string containing the query string component of the HTTP request URI, without the leading "?" (e.g., "foo=bar&baz=quux"). The value may be an empty string.
+	"owin.RequestScheme"	A string containing the URI scheme used for the request (e.g., "http", "https"); see URI Scheme.
+
+	2)The second key element of OWIN is the application delegate. This is a function signature which serves as the primary interface between all components in an OWIN application. The definition for the application delegate is as follows:
+	Func<IDictionary<string, object>, Task>;
+	The application delegate then is simply an implementation of the Func delegate type where the function accepts the environment dictionary as input and returns a Task
+
+
+
+
+
+
+
+
+
+
+
+	Owin Hosting Reference - https://docs.microsoft.com/en-us/aspnet/aspnet/overview/owin-and-katana/getting-started-with-owin-and-katana
+	======================
+	a)With IIS hosting, IIS acts as both the HTTP server and as the process that host the server.Hosting OWIN in IIS  option gives you the flexibility and composability of an OWIN pipeline together with the mature feature set of IIS. Using this option, the OWIN application runs in the ASP.NET request pipeline [install-package Microsoft.Owin.Host.SystemWeb –Pre]
+	b)With self-hosting, your application creates the process and uses the HttpListener class as the HTTP server.The Microsoft.Owin.Diagnostics package contains middleware that catches unhandled exceptions and displays an HTML page with error details. This page functions much like the ASP.NET error page that is sometimes called the "yellow screen of death" (YSOD). Like the YSOD, the Katana error page is useful during development.The server starts listening to mentioned port , say http://localhost:9000 and respond when calling the application  .  [Install-Package Microsoft.Owin.SelfHost -Pre]
+	Using Owinhost.exe
+	Install Owinhost from the PMC:
+	Install-Package OwinHost
+	Navigate to the application folder (the folder containing the Web.config file) and in a command prompt and type:
+	..\packages\Owinhost<Version>\tools\Owinhost.exe
+	The command window will show:
+	C:\StartupDemo\StartupDemo>..\packages\OwinHost.2.0.0\tools\Owin
+	Host.exe
+	Starting with the default port: 5000 (http://localhost:5000/)
+	Started successfully
+	Press Enter to exit
+	Launch a browser with the URL http://localhost:5000/.
+	OwinHost honored the startup conventions listed above.
+
+
+
+
+
+
+
+
+
+
+	OWIN Startup Class Detection - https://docs.microsoft.com/en-us/aspnet/aspnet/overview/owin-and-katana/owin-startup-class-detection
+	==============================
+	Every OWIN Application has a startup class where you specify components for the application pipeline. There are different ways you can connect your startup class with the runtime, depending on the hosting model you choose (OwinHost, IIS, and IIS-Express). 
+
+	a)Naming Convention: Katana looks for a class named Startup in namespace matching the assembly name or the global namespace.
+	b)OwinStartup Attribute: This is the approach most developers will take to specify the startup class. The following attribute will set the startup class to the TestStartup class in the StartupDemo namespace.
+		C#
+		 Copy
+		[assembly: OwinStartup(typeof(StartupDemo.TestStartup))]
+		The OwinStartup attribute overrides the naming convention. You can also specify a friendly name with this attribute, however, using a friendly name requires you to also use the appSetting element in the configuration file.
+	c)The appSetting element in the Configuration file: The appSetting element overrides the OwinStartup attribute and naming convention. You can have multiple startup classes (each using an OwinStartup attribute) and configure which startup class will be loaded in a configuration file using markup similar to the following:
+		XML
+		 Copy
+		<appSettings>  
+		  <add key="owin:appStartup" value="StartupDemo.ProductionStartup" />
+		</appSettings>
+		The following key, which explicitly specifies the startup class and assembly can also be used:
+		XML
+		 Copy
+		<add key="owin:appStartup" value="StartupDemo.ProductionStartup, StartupDemo" />
+		The following XML in the configuration file specifies a friendly startup class name of ProductionConfiguration.
+		XML
+		 Copy
+		<appSettings>  
+		  <add key="owin:appStartup" value="ProductionConfiguration" />       
+		</appSettings>
+		The above markup must be used with the following OwinStartup attribute which specifies a friendly name and causes the ProductionStartup2 class to run.
+		C#
+		 Copy
+		[assembly: OwinStartup("ProductionConfiguration", typeof(StartupDemo.ProductionStartup2))]
+
+		namespace StartupDemo
+		{
+			public class ProductionStartup
+			{
+				public void Configuration(IAppBuilder app)
+				{
+					app.Run(context =>
+					{
+						string t = DateTime.Now.Millisecond.ToString();
+						return context.Response.WriteAsync(t + " Production OWIN App");
+					});
+				}
+			}
+			public class ProductionStartup2
+			{
+				public void Configuration(IAppBuilder app)
+				{
+					app.Run(context =>
+					{
+						string t = DateTime.Now.Millisecond.ToString();
+						return context.Response.WriteAsync(t + " 2nd Production OWIN App");
+					});
+				}
+			}
+		}
+		To disable OWIN startup discovery add the appSetting owin:AutomaticAppStartup with a value of "false" in the web.config file.
+		XML
+		 Copy
+		<add key="owin:AutomaticAppStartup " value="false" />
+
+
+	The app.Use lambda expression is used to register the specified middleware component to the OWIN pipeline
+	The app.Run lambda expression hooks up the pipeline to incoming requests and provides the response mechanism
+
+
+OWIN OAuth 2.0 Authorization Server
+===================================
+===================================
+
+
+https://tools.ietf.org/html/rfc6749 or D:\Holder\HTech\Security\Owin\ The OAuth 2.0 Authorization Framework.pdf
+
+ In order to provide third-party applications access to
+   restricted resources, the resource owner shares its credentials with
+   the third party.  This creates several problems and limitations:
+
+   o  Third-party applications are required to store the resource
+      owner's credentials for future use, typically a password in
+      clear-text.
+
+   o  Servers are required to support password authentication, despite
+      the security weaknesses inherent in passwords.
+
+   o  Third-party applications gain overly broad access to the resource
+      owner's protected resources, leaving resource owners without any
+      ability to restrict duration or access to a limited subset of
+      resources.
+
+   o  Resource owners cannot revoke access to an individual third party
+      without revoking access to all third parties, and must do so by
+      changing the third party's password.
+	  
+   o  Compromise of any third-party application results in compromise of
+      the end-user's password and all of the data protected by that
+      password.
+
+The OAuth 2.0 framework enables a third-party app to obtain limited access to an HTTP service. 
+   Instead of using the resource owner's credentials to access protected
+   resources, the client obtains an access token -- a string denoting a
+   specific scope, lifetime, and other access attributes.  Access tokens
+   are issued to third-party clients by an authorization server with the
+   approval of the resource owner.  The client uses the access token to
+   access the protected resources hosted by the resource server.
+
+
+Protocol Flow
+============
+
+     +--------+                               +---------------+
+     |        |--(A)- Authorization Request ->|   Resource    |
+     |        |                               |     Owner     |
+     |        |<-(B)-- Authorization Grant ---|               |
+     |        |                               +---------------+
+     |        |
+     |        |                               +---------------+
+     |        |--(C)-- Authorization Grant -->| Authorization |
+     | Client |                               |     Server    |
+     |        |<-(D)----- Access Token -------|               |
+     |        |                               +---------------+
+     |        |
+     |        |                               +---------------+
+     |        |--(E)----- Access Token ------>|    Resource   |
+     |        |                               |     Server    |
+     |        |<-(F)--- Protected Resource ---|               |
+     +--------+                               +---------------+
+
+                      Abstract Protocol Flow
+
+					 Authorization Grant
+
+   An authorization grant is a credential representing the resource
+   owner's authorization (to access its protected resources) used by the
+   client to obtain an access token.  This specification defines four
+   grant types -- authorization code, implicit, resource owner password
+   credentials, and client credentials -- as well as an extensibility
+   mechanism for defining additional types.
+
+   Roles
+   =====
+
+   OAuth defines four roles:
+
+   resource owner
+      An entity capable of granting access to a protected resource.
+      When the resource owner is a person, it is referred to as an
+      end-user.
+
+   resource server
+      The server hosting the protected resources, capable of accepting
+      and responding to protected resource requests using access tokens.
+
+   client
+      An application making protected resource requests on behalf of the
+      resource owner and with its authorization.  The term "client" does
+      not imply any particular implementation characteristics (e.g.,
+      whether the application executes on a server, a desktop, or other
+      devices).
+
+   authorization server
+      The server issuing access tokens to the client after successfully
+      authenticating the resource owner and obtaining authorization.
+
+   The interaction between the authorization server and resource server
+   is beyond the scope of this specification.  The authorization server
+   may be the same server as the resource server or a separate entity.
+   A single authorization server may issue access tokens accepted by
+   multiple resource servers.
+
+   Resource Owner Password Credentials
+   ===================================
+
+   The resource owner password credentials (i.e., username and password)
+   can be used directly as an authorization grant to obtain an access
+   token.  The credentials should only be used when there is a high
+   degree of trust between the resource owner and the client (e.g., the
+   client is part of the device operating system or a highly privileged
+   application), and when other authorization grant types are not
+   available (such as an authorization code).
+
+   Even though this grant type requires direct client access to the
+   resource owner credentials, the resource owner credentials are used
+   for a single request and are exchanged for an access token.  This
+   grant type can eliminate the need for the client to store the
+   resource owner credentials for future use, by exchanging the
+   credentials with a long-lived access token or refresh token.
+
+   
+				Authorization Code Grant
+				========================
+
+   The authorization code grant type is used to obtain both access
+   tokens and refresh tokens and is optimized for confidential clients.
+   Since this is a redirection-based flow, the client must be capable of
+   interacting with the resource owner's user-agent (typically a web
+   browser) and capable of receiving incoming requests (via redirection)
+   from the authorization server.
+
+     +----------+
+     | Resource |
+     |   Owner  |
+     |          |
+     +----------+
+          ^
+          |
+         (B)
+     +----|-----+          Client Identifier      +---------------+
+     |         -+----(A)-- & Redirection URI ---->|               |
+     |  User-   |                                 | Authorization |
+     |  Agent  -+----(B)-- User authenticates --->|     Server    |
+     |          |                                 |               |
+     |         -+----(C)-- Authorization Code ---<|               |
+     +-|----|---+                                 +---------------+
+       |    |                                         ^      v
+      (A)  (C)                                        |      |
+       |    |                                         |      |
+       ^    v                                         |      |
+     +---------+                                      |      |
+     |         |>---(D)-- Authorization Code ---------'      |
+     |  Client |          & Redirection URI                  |
+     |         |                                             |
+     |         |<---(E)----- Access Token -------------------'
+     +---------+       (w/ Optional Refresh Token)
+
+   Note: The lines illustrating steps (A), (B), and (C) are broken into
+   two parts as they pass through the user-agent.
+
+                      Authorization Code Flow
+					  =======================
+
+   The flow illustrated in Figure 3 includes the following steps:
+
+   (A)  The client initiates the flow by directing the resource owner's
+        user-agent to the authorization endpoint.  The client includes
+        its client identifier, requested scope, local state, and a
+        redirection URI to which the authorization server will send the
+        user-agent back once access is granted (or denied).
+
+   (B)  The authorization server authenticates the resource owner (via
+        the user-agent) and establishes whether the resource owner
+        grants or denies the client's access request.
+
+   (C)  Assuming the resource owner grants access, the authorization
+        server redirects the user-agent back to the client using the
+        redirection URI provided earlier (in the request or during
+        client registration).  The redirection URI includes an
+        authorization code and any local state provided by the client
+        earlier.
+
+   (D)  The client requests an access token from the authorization
+        server's token endpoint by including the authorization code
+        received in the previous step.  When making the request, the
+        client authenticates with the authorization server.  The client
+        includes the redirection URI used to obtain the authorization
+        code for verification.
+
+   (E)  The authorization server authenticates the client, validates the
+        authorization code, and ensures that the redirection URI
+        received matches the URI used to redirect the client in
+        step (C).  If valid, the authorization server responds back with
+        an access token and, optionally, a refresh token.
+
+   Refresh Token
+   ==============
+
+   Refresh tokens are credentials used to obtain access tokens.  Refresh
+   tokens are issued to the client by the authorization server and are
+   used to obtain a new access token when the current access token
+   becomes invalid or expires, or to obtain additional access tokens
+   with identical or narrower scope (access tokens may have a shorter
+   lifetime and fewer permissions than authorized by the resource
+   owner).  Issuing a refresh token is optional at the discretion of the
+   authorization server.  If the authorization server issues a refresh
+   token, it is included when issuing an access token (i.e., step (D) in
+   Figure 1).
+
+   A refresh token is a string representing the authorization granted to
+   the client by the resource owner.  The string is usually opaque to
+   the client.  The token denotes an identifier used to retrieve the
+   authorization information.  Unlike access tokens, refresh tokens are
+   intended for use only with authorization servers and are never sent
+   to resource servers.
+
+  +--------+                                           +---------------+
+  |        |--(A)------- Authorization Grant --------->|               |
+  |        |                                           |               |
+  |        |<-(B)----------- Access Token -------------|               |
+  |        |               & Refresh Token             |               |
+  |        |                                           |               |
+  |        |                            +----------+   |               |
+  |        |--(C)---- Access Token ---->|          |   |               |
+  |        |                            |          |   |               |
+  |        |<-(D)- Protected Resource --| Resource |   | Authorization |
+  | Client |                            |  Server  |   |     Server    |
+  |        |--(E)---- Access Token ---->|          |   |               |
+  |        |                            |          |   |               |
+  |        |<-(F)- Invalid Token Error -|          |   |               |
+  |        |                            +----------+   |               |
+  |        |                                           |               |
+  |        |--(G)----------- Refresh Token ----------->|               |
+  |        |                                           |               |
+  |        |<-(H)----------- Access Token -------------|               |
+  +--------+           & Optional Refresh Token        +---------------+
+
+                Refreshing an Expired Access Token
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Delete Global.asax Class - http://bitoftech.net/2014/06/01/token-based-authentication-asp-net-web-api-2-owin-asp-net-identity/
+
+
+No need to use this class and fire up the Application_Start event after we’ve configured our “Startup” class so feel free to delete it.
+
+
+Add support for OAuth Bearer Tokens Generation - http://bitoftech.net/2014/06/01/token-based-authentication-asp-net-web-api-2-owin-asp-net-identity/
+================================================
+=================================================
+
+Install-Package Microsoft.Owin.Security.OAuth -Version 2.1.0
+After you install this package open file “Startup” again and call the new method named “ConfigureOAuth” as the first line inside the method “Configuration”, the implemntation for this method as below:
+
+
+public class Startup
+    {
+        public void Configuration(IAppBuilder app)
+        {
+            ConfigureOAuth(app);
+	    //Rest of code is here;
+        }
+
+        public void ConfigureOAuth(IAppBuilder app)
+        {
+            OAuthAuthorizationServerOptions OAuthServerOptions = new OAuthAuthorizationServerOptions()
+            {
+                AllowInsecureHttp = true,
+                TokenEndpointPath = new PathString("/token"),
+                AccessTokenExpireTimeSpan = TimeSpan.FromDays(1),
+                Provider = new SimpleAuthorizationServerProvider()
+            };
+
+            // Token Generation
+            app.UseOAuthAuthorizationServer(OAuthServerOptions);
+            app.UseOAuthBearerAuthentication(new OAuthBearerAuthenticationOptions());
+
+        }
+    }
+
+public class Startup
+    {
+        public void Configuration(IAppBuilder app)
+        {
+            ConfigureOAuth(app);
+	    //Rest of code is here;
+        }
+ 
+        public void ConfigureOAuth(IAppBuilder app)
+        {
+            OAuthAuthorizationServerOptions OAuthServerOptions = new OAuthAuthorizationServerOptions()
+            {
+                AllowInsecureHttp = true,
+                TokenEndpointPath = new PathString("/token"),
+                AccessTokenExpireTimeSpan = TimeSpan.FromDays(1),
+                Provider = new SimpleAuthorizationServerProvider()
+            };
+ 
+            // Token Generation
+            app.UseOAuthAuthorizationServer(OAuthServerOptions);
+            app.UseOAuthBearerAuthentication(new OAuthBearerAuthenticationOptions());
+ 
+        }
+    }
+Here we’ve created new instance from class “OAuthAuthorizationServerOptions” and set its option as the below:
+
+The path for generating tokens will be as :”http://localhost:port/token”. We’ll see how we will issue HTTP POST request to generate token in the next steps.
+We’ve specified the expiry for token to be 24 hours, so if the user tried to use the same token for authentication after 24 hours from the issue time, his request will be rejected and HTTP status code 401 is returned.
+We’ve specified the implementation on how to validate the credentials for users asking for tokens in custom class named “SimpleAuthorizationServerProvider”.
+Now we passed this options to the extension method “UseOAuthAuthorizationServer” so we’ll add the authentication middleware to the pipeline.
+
+ Implement the “SimpleAuthorizationServerProvider” class
+
+Add new folder named “Providers” then add new class named “SimpleAuthorizationServerProvider”, paste the code snippet below:
+
+
+public class SimpleAuthorizationServerProvider : OAuthAuthorizationServerProvider
+    {
+        public override async Task ValidateClientAuthentication(OAuthValidateClientAuthenticationContext context)
+        {
+            context.Validated();
+        }
+
+        public override async Task GrantResourceOwnerCredentials(OAuthGrantResourceOwnerCredentialsContext context)
+        {
+
+            context.OwinContext.Response.Headers.Add("Access-Control-Allow-Origin", new[] { "*" });
+
+            using (AuthRepository _repo = new AuthRepository())
+            {
+                IdentityUser user = await _repo.FindUser(context.UserName, context.Password);
+
+                if (user == null)
+                {
+                    context.SetError("invalid_grant", "The user name or password is incorrect.");
+                    return;
+                }
+            }
+
+            var identity = new ClaimsIdentity(context.Options.AuthenticationType);
+            identity.AddClaim(new Claim("sub", context.UserName));
+            identity.AddClaim(new Claim("role", "user"));
+
+            context.Validated(identity);
+
+        }
+    }
+
+public class SimpleAuthorizationServerProvider : OAuthAuthorizationServerProvider
+    {
+        public override async Task ValidateClientAuthentication(OAuthValidateClientAuthenticationContext context)
+        {
+            context.Validated();
+        }
+ 
+        public override async Task GrantResourceOwnerCredentials(OAuthGrantResourceOwnerCredentialsContext context)
+        {
+ 
+            context.OwinContext.Response.Headers.Add("Access-Control-Allow-Origin", new[] { "*" });
+ 
+            using (AuthRepository _repo = new AuthRepository())
+            {
+                IdentityUser user = await _repo.FindUser(context.UserName, context.Password);
+ 
+                if (user == null)
+                {
+                    context.SetError("invalid_grant", "The user name or password is incorrect.");
+                    return;
+                }
+            }
+ 
+            var identity = new ClaimsIdentity(context.Options.AuthenticationType);
+            identity.AddClaim(new Claim("sub", context.UserName));
+            identity.AddClaim(new Claim("role", "user"));
+ 
+            context.Validated(identity);
+ 
+        }
+    }
+As you notice this class inherits from class “OAuthAuthorizationServerProvider”, we’ve overridden two methods “ValidateClientAuthentication” and “GrantResourceOwnerCredentials”. The first method is responsible for validating the “Client”, in our case we have only one client so we’ll always return that its validated successfully.
+
+The second method “GrantResourceOwnerCredentials” is responsible to validate the username and password sent to the authorization server’s token endpoint, so we’ll use the “AuthRepository” class we created earlier and call the method “FindUser” to check if the username and password are valid.
+
+If the credentials are valid we’ll create “ClaimsIdentity” class and pass the authentication type to it, in our case “bearer token”, then we’ll add two claims (“sub”,”role”) and those will be included in the signed token. You can add different claims here but the token size will increase for sure.
+
+Now generating the token happens behind the scenes when we call “context.Validated(identity)”.
+
+To allow CORS on the token middleware provider we need to add the header “Access-Control-Allow-Origin” to Owin context, if you forget this, generating the token will fail when you try to call it from your browser. Not that this allows CORS for token middleware provider not for ASP.NET Web API which we’ll add on the next step.
+
+
+
+========================================================================================================
+
+MVC,WEB API by default have ASP.NET IDENTITY Based Cokkie ASuthentication options and not Token based Authentation.
+Token based Authentation required manuall implementations
+"Microsoft.Owin.Security.OAuth". This is a core package required to support any standard OAuth 2.0 authentication workflow. 
+“Microsoft.Owin.Host.SystemWeb” namespace contains the types related to handling OWIN requests. It helps us to run OWIN-based applications on IIS using the ASP.NET request pipeline.
+
+
+
+http://www.c-sharpcorner.com/UploadFile/ff2f08/token-based-authentication-using-Asp-Net-web-api-owin-and-i/
+
+
