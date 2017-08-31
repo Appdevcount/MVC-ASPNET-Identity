@@ -9,6 +9,6 @@ namespace MVC_ASPNET_Identity
         public void Configuration(IAppBuilder app)
         {
             ConfigureAuth(app);
-        }
+        } 
     }
 }
